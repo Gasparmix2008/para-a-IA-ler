@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+
+<body class="bg-[#202020] text-white min-h-screen flex items-center justify-center">
+  <div class="w-full max-w-[90%] p-20 bg-[#191919] rounded-xl shadow-xl border border-zinc-800/50">
+    <h2 class="text-2xl font-semibold text-center mb-6">Routes Register | PAGE HELP</h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+
+      <% function renderGroup(title, method, color) { %>
+        <div class="p-4 rounded-lg border border-zinc-800/40 bg-<%= color %>-200/10">
+          <h3 class="text-lg font-semibold mb-3">
+            <%= title %>
+          </h3>
+          <table class="w-full border-collapse">
+            <thead>
+              <tr>
+                <th class="py-2 text-left text-sm border-b border-zinc-700/40">URL</th>
+                <th class="py-2 text-left text-sm border-b border-zinc-700/40">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% routes.filter(r=> r.method?.toUpperCase() === method).forEach(r => { %>
+                <tr class="hover:bg-zinc-800/50 transition">
+                  <td class="py-1 text-sm pr-2">
+                    <%= r.url %>
+                  </td>
+                  <td class="py-1">
+                    <% if (method==="GET" && r.url !=="/help" && !(r.url.includes(":"))) { %>
+                      <a href="<%= r.url %>" target="_blank"
+                        class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 transition text-xs font-medium text-white">
+                        Open
+                      </a>
+                      <% } %>
+                  </td>
+
+                </tr>
+                <% }) %>
+            </tbody>
+          </table>
+        </div>
+        <% } %>
+
+          <% renderGroup("GET", "GET" , "emerald" ); %>
+            <% renderGroup("POST", "POST" , "yellow" ); %>
+              <% renderGroup("PUT", "PUT" , "sky" ); %>
+                <% renderGroup("DELETE", "DELETE" , "orange" ); %>
+
+    </div>
+  </div>
+</body>
+
+</html>
