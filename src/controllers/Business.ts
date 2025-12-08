@@ -121,45 +121,65 @@ export default class BusinessController {
     return expectedSignature === signature ? business : null;
   }
 
-  async VerifyUser(phone: string, customerName: string, businessId: string) {
+  async VerifyUser(
+    customerPhone: string,
+    customerName: string,
+    businessId: string
+  ) {
+    // Busca o usuário existente
     let user = await prisma.user.findUnique({
-      where: { phone },
+      where: { phone: customerPhone },
       include: {
         tickets: {
           where: { businessId },
-          orderBy: {
-            createdAt: "desc"
-          }
-        }
-      }
+          orderBy: { createdAt: "desc" },
+        },
+      },
     });
 
+    // Caso não exista, cria
     if (!user) {
       user = await prisma.user.create({
         data: {
-          phone,
+          phone: customerPhone,
           customerName,
-          businessId
+          businessId,
         },
         include: {
           tickets: {
-            where: { businessId }
-          }
-        }
+            where: { businessId },
+          },
+        },
       });
     }
 
+    // Caso exista e o nome seja diferente → faz UPDATE
+    else if (user.customerName !== customerName) {
+      user = await prisma.user.update({
+        where: { phone: customerPhone },
+        data: { customerName },
+        include: {
+          tickets: {
+            where: { businessId },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      });
+    }
+
+    // Garante que todos os itens sejam enriquecidos com o product
     for (const ticket of user.tickets) {
       if (!Array.isArray(ticket.items)) {
-        ticket.items = []; // garante array
+        ticket.items = [];
         continue;
       }
 
       ticket.items = await Promise.all(
         ticket.items.map(async (item: any) => {
           const product = await prisma.product.findUnique({
-            where: { id: item.id }
+            where: { id: item.id },
           });
+
           return { ...item, product };
         })
       );
@@ -167,6 +187,7 @@ export default class BusinessController {
 
     return user;
   }
+
 
   async CreateTicket(ticket: TicketPayload, businessId: string) {
     const user = await this.VerifyUser(
@@ -220,6 +241,13 @@ export default class BusinessController {
     return newTicket;
   }
 
+  async SearchUser(customerPhone: string) {
+    return prisma.user.findUnique({
+      where: { phone: customerPhone },
+      omit: { id: true, businessId: true, createdAt: true, phone: true }
+    })
+  }
+
   async SendToAdmin(ticket: any, port: string) {
     socketEmitter.sendToAdmins(port, "admin:new-ticket", ticket);
   }
@@ -231,13 +259,78 @@ export default class BusinessController {
     })
   }
 
-  async Tickets(businessId: string) {
-    return prisma.ticket.findMany({
-      where: { businessId },
-      include: { 
-        user: true
-      }
+  async Tickets(businessId: string, { page, limit, date, status }) {
+    const skip = (page - 1) * limit;
+
+    // Construir filtro de data corretamente
+    let dateFilter = {};
+    if (date) {
+      const [year, month, day] = date.split("-").map(Number);
+
+      const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+      const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+
+      dateFilter = {
+        createdAt: {
+          gte: startDate,
+          lte: endDate
+        }
+      };
+    }
+
+
+    // Buscar tickets com paginação e filtros
+    const [tickets, total] = await Promise.all([
+      prisma.ticket.findMany({
+        where: {
+          businessId,
+          ...dateFilter,
+          ...(status ? { status } : {})
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              customerName: true
+            }
+          }
+        }
+      }),
+      // Contar total para paginação
+      prisma.ticket.count({
+        where: {
+          businessId,
+          ...dateFilter,
+          ...(status ? { status } : {})
+        }
+      })
+    ]);
+
+    return {
+      tickets,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
+  }
+
+  async UpdateTicket(business: any, ticketId: string, status: string) {
+    const ticket = await prisma.ticket.update({
+      where: { id: ticketId, businessId: business.id },
+      data: { status },
+      include: { user: true }
     })
+
+
+    this.SendToClient(ticket, ticket.user.phone, business.port)
+    return ticket
+  }
+
+  async SendToClient(ticket: any, customerPhone: string, port: string) {
+    socketEmitter.sendToClient(port, customerPhone, "client:update-status", ticket);
   }
 
   async Information(businessId: string) {

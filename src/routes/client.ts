@@ -162,4 +162,53 @@ export default async function (app: FastifyInstance) {
             });
         }
     });
+
+    app.get("/update", async (Request, Reply) => {
+        try {
+            const {
+                port,
+                timestamp,
+                signature,
+                ticketid,
+                status
+            } = Request.query as {
+                port?: string;
+                timestamp?: string;
+                signature?: string;
+                ticketid: string;
+                status: string;
+            };
+
+            // 1. valida parâmetros obrigatórios
+            if (!port || !timestamp || !signature) {
+                return Reply.status(401).send({
+                    code: 401,
+                    message: "Unauthorized — missing auth params"
+                });
+            }
+
+            // 2. valida HMAC
+            const business = await new BusinessController().ValidationHMAC(
+                Number(port),
+                timestamp,
+                signature
+            );
+
+            if (!business)
+                return Reply.status(401).send({ code: 401, message: "Unauthorized" });
+
+            return await new BusinessController().UpdateTicket(business, ticketid, status)
+        } catch (error) {
+
+        }
+    })
+
+    app.get("/search/user", async (Request, Reply) => {
+        try {
+            const { customerPhone } = Request.query as { customerPhone: string };
+            return await new BusinessController().SearchUser(customerPhone)
+        } catch (error) {
+            console.log(error)
+        }
+    })
 }

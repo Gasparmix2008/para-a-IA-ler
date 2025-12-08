@@ -134,10 +134,22 @@ export default async function (app: FastifyInstance) {
 
     app.get("/tickets", async (Request, Reply) => {
         try {
-            const { port, timestamp, signature } = Request.query as {
+            const {
+                port,
+                timestamp,
+                signature,
+                page = "1",
+                limit = "20",
+                date,
+                status
+            } = Request.query as {
                 port?: string;
                 timestamp?: string;
                 signature?: string;
+                page?: string;
+                limit?: string;
+                date?: string;
+                status?: string;
             };
 
             // 1. valida parâmetros obrigatórios
@@ -162,15 +174,27 @@ export default async function (app: FastifyInstance) {
                 });
             }
 
-            // 3. retorna os produtos
-            const tickets = await new BusinessController().Tickets(business.id);
-            return Reply.send({tickets});
+            // 3. paginação e filtros
+            const pagination = {
+                page: Number(page),
+                limit: Number(limit),
+                date: date ?? null,       // formato: YYYY-MM-DD
+                status: status ?? null    // ex: "open", "closed", etc.
+            };
 
+            // 4. retorna os tickets filtrados
+            const tickets = await new BusinessController().Tickets(
+                business.id,
+                pagination
+            );
+
+            return Reply.send({ tickets });
 
         } catch (error) {
-            console.log(error)
+            console.log(error);
+            return Reply.status(500).send({ code: 500, message: "Internal server error" });
         }
-    })
+    });
 
     app.post("/settings/register", async (Request, Reply) => {
         const { address,
