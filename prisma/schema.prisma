@@ -1,0 +1,117 @@
+// =====================================================
+// 🔧 PRISMA CONFIGURATION
+// =====================================================
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// =====================================================
+// 📊 ENUMS
+// =====================================================
+
+enum AdminType {
+  SERVER    // Server Administrator
+  BUSINESS  // Business / Company Administrator
+}
+
+// =====================================================
+// 📊 PERMISSION MODELS
+// =====================================================
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique // SuperAdmin, Manager, Staff, Moderator, etc.
+  description String?
+  permissions RolePermission[]
+  
+  // Relation with admins
+  admins Admin[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RolePermission {
+  id         String  @id @default(uuid())
+  resource   String  // "finance", "order", "users", "customers", "products", etc.
+  action     String  // "manage", "view", "create", "update", "delete", "approve"
+  allowed    Boolean @default(true)
+  attributes Json?   // ABAC (Attribute-Based Access Control) - extra conditions
+
+  roleId     String
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, resource, action])
+  @@index([roleId])
+  @@index([resource, action])
+}
+
+// =====================================================
+// 👥 USER MODELS
+// =====================================================
+
+model Customer {
+  id    String @id @default(uuid())
+  name  String
+  phone String @unique
+  
+  // Customers do not have roles - default system access
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([name])
+}
+
+model Admin {
+  id       String    @id @default(uuid())
+  name     String
+  email    String    @unique
+  password String
+  type     AdminType // SERVER or BUSINESS
+  
+  // Permissions
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  // SESSIONS []
+  sessions Session[]
+  
+  // Additional information
+  isActive Boolean @default(true) // If false, the admin is banned or inactive
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastLogin DateTime?
+  
+  @@index([roleId])
+  @@index([type])
+  @@index([email])
+  @@index([type, isActive]) // For queries filtering by type and status
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  adminId   String
+  admin     Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  ip        String?
+  userAgent String?
+
+  active    Boolean  @default(true)
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([adminId])
+  @@index([token])
+  @@index([active, expiresAt])
+}
