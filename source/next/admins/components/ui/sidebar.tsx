@@ -40,7 +40,8 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
-  expandSidebar: () => void
+  hoverOpen: boolean
+  setHoverOpen: (open: boolean) => void
 }
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
@@ -69,6 +70,7 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const [hoverOpen, setHoverOpen] = React.useState(false)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -94,13 +96,6 @@ function SidebarProvider({
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
   }, [isMobile, setOpen, setOpenMobile])
 
-  // Helper to expand the sidebar (only if collapsed)
-  const expandSidebar = React.useCallback(() => {
-    if (!isMobile && !open) {
-      setOpen(true)
-    }
-  }, [isMobile, open, setOpen])
-
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -119,7 +114,7 @@ function SidebarProvider({
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
-  const state = open ? "expanded" : "collapsed"
+  const state = open || hoverOpen ? "expanded" : "collapsed"
 
   const contextValue = React.useMemo<SidebarContextProps>(
     () => ({
@@ -130,9 +125,10 @@ function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
-      expandSidebar,
+      hoverOpen,
+      setHoverOpen,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, expandSidebar]
+    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, hoverOpen]
   )
 
   return (
@@ -172,12 +168,46 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile, expandSidebar } = useSidebar()
+  const { isMobile, state, openMobile, setOpenMobile, open, setHoverOpen } = useSidebar()
+  const [hasOpenDropdown, setHasOpenDropdown] = React.useState(false)
 
-  // Add click handler to expand sidebar when collapsed
-  const handleClick = React.useCallback(() => {
-    expandSidebar()
-  }, [expandSidebar])
+  // Monitor for open dropdowns/popovers
+  React.useEffect(() => {
+    const checkForOpenDropdowns = () => {
+      const openDropdown = document.querySelector(
+        '[data-state="open"][role="dialog"], [data-state="open"][role="menu"], [data-radix-popper-content-wrapper]'
+      )
+      setHasOpenDropdown(!!openDropdown)
+    }
+
+    // Check immediately
+    checkForOpenDropdowns()
+
+    // Use MutationObserver to watch for dropdown state changes
+    const observer = new MutationObserver(checkForOpenDropdowns)
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['data-state'],
+      subtree: true,
+      childList: true,
+    })
+
+    return () => observer.disconnect()
+  }, [])
+
+  // Add hover handlers to expand/collapse sidebar when in icon mode
+  const handleMouseEnter = React.useCallback(() => {
+    if (!isMobile && !open && collapsible === "icon" && !hasOpenDropdown) {
+      setHoverOpen(true)
+    }
+  }, [isMobile, open, collapsible, setHoverOpen, hasOpenDropdown])
+
+  const handleMouseLeave = React.useCallback(() => {
+    // Don't close if a dropdown is open
+    if (!isMobile && !open && collapsible === "icon" && !hasOpenDropdown) {
+      setHoverOpen(false)
+    }
+  }, [isMobile, open, collapsible, setHoverOpen, hasOpenDropdown])
 
   if (collapsible === "none") {
     return (
@@ -259,7 +289,8 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
           className="bg-sidebar group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm"
-          onClick={handleClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
         >
           {children}
         </div>
@@ -324,7 +355,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "bg-background relative flex w-full flex-1 flex-col",
+        "bg-background mt-14 p-2 relative flex w-full flex-1 flex-col",
         "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className
       )}
@@ -584,7 +615,7 @@ function SidebarMenuAction({
         "peer-data-[size=lg]/menu-button:top-2.5",
         "group-data-[collapsible=icon]:hidden",
         showOnHover &&
-          "peer-data-[active=true]/menu-button:text-sidebar-accent-foreground group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 md:opacity-0",
+        "peer-data-[active=true]/menu-button:text-sidebar-accent-foreground group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 md:opacity-0",
         className
       )}
       {...props}

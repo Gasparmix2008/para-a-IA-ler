@@ -1,29 +1,17 @@
 "use client"
 
 import * as React from "react"
+import * as LucideIcons from "lucide-react"
 import {
   Command,
-  Frame,
-  Map,
-  PieChart,
-  Settings2,
   SquareTerminal,
-  Users,
-  WalletMinimal,
-  Package,
-  CreditCard,
-  Gift,
-  ShoppingCart,
-  Store,
-  BarChart3,
-  DollarSign,
-  Shield,
-  FileText,
+  Loader2,
 } from "lucide-react"
 
 import { NavMain } from "@/components/layout/sidebar/nav-main"
 import { NavUser } from "@/components/layout/sidebar/nav-user"
 import { TeamSwitcher } from "@/components/layout/sidebar/team"
+import { SiteHeader } from "@/components/layout/sidebar/side-header"
 import {
   Sidebar,
   SidebarContent,
@@ -51,6 +39,7 @@ type MenuItem = {
   subs?: SubItem[]
   resource?: string
   permissions?: string[]
+  isActive?: boolean
 }
 
 // Tipo compatível com NavMain
@@ -69,25 +58,17 @@ type NavSection = {
   }>
 }
 
-// Mapeamento de ícones por nome
-const iconMap: Record<string, any> = {
-  SquareTerminal,
-  WalletMinimal,
-  Users,
-  Settings2,
-  Frame,
-  Map,
-  PieChart,
-  Command,
-  Package,
-  CreditCard,
-  Gift,
-  ShoppingCart,
-  Store,
-  BarChart3,
-  DollarSign,
-  Shield,
-  FileText,
+// Função para obter ícone dinâmico do lucide-react
+function getDynamicIcon(iconName: string): any {
+  if (!iconName) return SquareTerminal
+
+  // Garante que a primeira letra seja maiúscula
+  const formattedIconName = iconName.charAt(0).toUpperCase() + iconName.slice(1)
+
+  // Busca o ícone no objeto LucideIcons
+  const IconComponent = (LucideIcons as any)[formattedIconName]
+
+  return IconComponent || SquareTerminal
 }
 
 const data = {
@@ -108,8 +89,8 @@ function convertMenuFormat(menu: MenuItem[]): NavSection[] {
   return menu.map((item) => ({
     title: item.title,
     url: item.link,
-    icon: typeof item.icon === 'string' ? iconMap[item.icon] || SquareTerminal : SquareTerminal,
-    isActive: false,
+    icon: typeof item.icon === 'string' ? getDynamicIcon(item.icon) : SquareTerminal,
+    isActive: item.isActive || false,
     resource: item.resource,
     permissions: item.permissions,
     items: item.subs?.map((sub) => ({
@@ -128,34 +109,34 @@ function filterMenuByPermissions(
 ): NavSection[] {
   const hasPermission = (requiredPermission: string, itemResource?: string): boolean => {
     if (permissions.includes(requiredPermission)) return true
-    
+
     if (itemResource) {
       const managePermission = `${itemResource}:manage`
       if (permissions.includes(managePermission)) return true
     }
-    
+
     const [resource, action] = requiredPermission.split(':')
-    
+
     if (!resource || !action) return true
-    
+
     const managePermission = `${resource}:manage`
     if (permissions.includes(managePermission)) return true
-    
+
     return false
   }
-  
+
   const hasAnyPermission = (requiredPermissions?: string[], itemResource?: string): boolean => {
     if (itemResource && permissions.includes(`${itemResource}:manage`)) {
       return true
     }
-    
+
     if (!requiredPermissions || requiredPermissions.length === 0) {
       if (itemResource) {
         return permissions.includes(`${itemResource}:manage`)
       }
       return true
     }
-    
+
     return requiredPermissions.some(perm => hasPermission(perm, itemResource))
   }
 
@@ -179,7 +160,7 @@ function filterMenuByPermissions(
       } as NavSection
     })
     .filter((section) => section !== null) as NavSection[]
-  
+
   return filtered
 }
 
@@ -190,10 +171,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [permissions, setPermissions] = useState<string[]>([])
   const [filteredMenu, setFilteredMenu] = useState<NavSection[]>([])
   const [isClient, setIsClient] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     setIsClient(true)
-    
+
     const storedName = localStorage.getItem("name")
     const storedEmail = localStorage.getItem("email")
     let storedRole = localStorage.getItem("role_changing_it_wont_help")
@@ -206,7 +188,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
     // Carrega o menu do localStorage
     let menuConfig: NavSection[] = []
-    
+
     if (storedMenu) {
       try {
         const parsedMenu: MenuItem[] = JSON.parse(storedMenu)
@@ -221,7 +203,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       try {
         const parsedPermissions = JSON.parse(storedPermissions)
         setPermissions(parsedPermissions)
-        
+
         // Filtra o menu baseado nas permissões (se houver permissões definidas)
         const filtered = filterMenuByPermissions(menuConfig, parsedPermissions)
         setFilteredMenu(filtered)
@@ -239,16 +221,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     data.user.name = storedName || "unknown"
     data.user.email = storedEmail || "unknown"
     data.user.role = storedRole || "unknown"
+
+    setIsLoading(false)
   }, [])
 
-  if (!isClient) {
+  if (!isClient || isLoading) {
     return (
-      <Sidebar collapsible="icon" {...props}>
-        <SidebarHeader>
-          <TeamSwitcher teams={data.teams} />
-        </SidebarHeader>
+      <Sidebar
+        collapsible="icon"
+        className="pt-14"
+        {...props}
+      >
+        <SiteHeader />
         <SidebarContent>
-          <NavMain items={[]} />
+          <div className="flex justify-center opacity-50 h-full">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
         </SidebarContent>
         <SidebarFooter>
           <NavUser user={data.user} />
@@ -259,11 +247,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }
 
   return (
-    <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
-      </SidebarHeader>
-      <SidebarContent>
+    <Sidebar
+      collapsible="icon"
+      className="pt-14 overflow-hidden"
+      {...props}
+    >
+      <SiteHeader />
+      <SidebarContent
+      className="overflow-hidden">
         <NavMain items={filteredMenu} />
       </SidebarContent>
       <SidebarFooter>

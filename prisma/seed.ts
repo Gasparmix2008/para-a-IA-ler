@@ -1,134 +1,148 @@
-import { PrismaClient } from '@prisma/client'
-import { Resources, Actions } from '../source/core/auth/abac-rbac'
+import { PrismaClient, PermissionAction, AdminType, Resource } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
 async function main() {
   console.log('🌱 Seeding database...')
 
-  // 1. Criar Role: SuperAdmin (acesso total)
-  const superAdminRole = await prisma.role.upsert({
-    where: { name: 'SuperAdmin' },
+  // ================================
+  // TENANT
+  // ================================
+  const tenant = await prisma.tenant.upsert({
+    where: { name: 'Default Company' },
     update: {},
     create: {
-      name: 'SuperAdmin',
+      name: 'Default Company'
+    }
+  })
+
+  // ================================
+  // ROLE: SUPER
+  // ================================
+  const superRole = await prisma.role.upsert({
+    where: {
+      tenantId_name: {
+        tenantId: tenant.id,
+        name: 'Super'
+      }
+    },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      name: 'Super',
       description: 'Acesso total ao sistema',
       permissions: {
         create: [
-          { resource: Resources.PRODUCT, action: Actions.MANAGE, allowed: true },
-          { resource: Resources.ORDER, action: Actions.MANAGE, allowed: true },
-          { resource: Resources.FINANCE, action: Actions.MANAGE, allowed: true },
-          { resource: Resources.CUSTOMER, action: Actions.MANAGE, allowed: true },
-          { resource: Resources.ADMINS, action: Actions.MANAGE, allowed: true },
+          { resource: Resource.PRODUCT, action: PermissionAction.MANAGE },
+          { resource: Resource.ORDER, action: PermissionAction.MANAGE },
+          { resource: Resource.FINANCE, action: PermissionAction.MANAGE },
+          { resource: Resource.CUSTOMER, action: PermissionAction.MANAGE },
+          { resource: Resource.ADMINS, action: PermissionAction.MANAGE }
         ]
       }
     }
   })
 
-  // 2. Criar Role: Manager (gerente)
+  // ================================
+  // ROLE: MANAGER
+  // ================================
   const managerRole = await prisma.role.upsert({
-    where: { name: 'Manager' },
+    where: {
+      tenantId_name: {
+        tenantId: tenant.id,
+        name: 'Manager'
+      }
+    },
     update: {},
     create: {
+      tenantId: tenant.id,
       name: 'Manager',
-      description: 'Gerente com restrições em finanças',
+      description: 'Gerente com restrições financeiras',
       permissions: {
         create: [
-          { resource: Resources.PRODUCT, action: Actions.MANAGE, allowed: true },
-          { resource: Resources.ORDER, action: Actions.MANAGE, allowed: true },
-          { 
-            resource: Resources.FINANCE, 
-            action: Actions.VIEW, 
-            allowed: true 
+          { resource: Resource.PRODUCT, action: PermissionAction.MANAGE },
+          { resource: Resource.ORDER, action: PermissionAction.MANAGE },
+          { resource: Resource.FINANCE, action: PermissionAction.VIEW },
+          {
+            resource: Resource.FINANCE,
+            action: PermissionAction.CREATE,
+            attributes: { maxValue: 5000 }
           },
-          { 
-            resource: Resources.FINANCE, 
-            action: Actions.CREATE, 
-            allowed: true,
-            attributes: {
-              maxValue: 5000 // Limite de R$ 5.000
-            }
-          },
-          { resource: Resources.CUSTOMER, action: Actions.VIEW, allowed: true },
+          { resource: Resource.CUSTOMER, action: PermissionAction.VIEW }
         ]
       }
     }
   })
 
-  // 3. Criar Role: Staff (funcionário)
+  // ================================
+  // ROLE: STAFF
+  // ================================
   const staffRole = await prisma.role.upsert({
-    where: { name: 'Staff' },
+    where: {
+      tenantId_name: {
+        tenantId: tenant.id,
+        name: 'Staff'
+      }
+    },
     update: {},
     create: {
+      tenantId: tenant.id,
       name: 'Staff',
       description: 'Funcionário com acesso limitado',
       permissions: {
         create: [
-          { resource: Resources.PRODUCT, action: Actions.VIEW, allowed: true },
-          { resource: Resources.ORDER, action: Actions.VIEW, allowed: true },
-          { resource: Resources.ORDER, action: Actions.UPDATE, allowed: true },
-          { 
-            resource: Resources.FINANCE, 
-            action: Actions.VIEW, 
-            allowed: true,
-            attributes: {
-              denyFields: ['profit', 'cost'] // Não pode ver lucro/custo
-            }
-          },
+          { resource: Resource.PRODUCT, action: PermissionAction.VIEW },
+          { resource: Resource.ORDER, action: PermissionAction.VIEW }
         ]
       }
     }
   })
 
-  // 4. Criar Admins de teste
-  const superAdmin = await prisma.admin.upsert({
-    where: { email: 'super@admin.com' },
+  // ================================
+  // ADMINS
+  // ================================
+  await prisma.admin.upsert({
+    where: { email: 'super@company.com' },
     update: {},
     create: {
-      name: 'Super Admin',
-      email: 'super@admin.com',
-      password: 'hashed_password_here',
-      type: 'SERVER',
-      roleId: superAdminRole.id
+      tenantId: tenant.id,
+      name: 'Super',
+      email: 'super@company.com',
+      passwordHash: '$2b$10$pHOuuh2zN3k9r/WVIb8eO.KBzwqGU6osI3UmnlklQx1UyhHFK4CVC',
+      type: AdminType.BUSINESS,
+      roleId: superRole.id
     }
   })
 
-  const manager = await prisma.admin.upsert({
+  await prisma.admin.upsert({
     where: { email: 'manager@company.com' },
     update: {},
     create: {
+      tenantId: tenant.id,
       name: 'Manager User',
       email: 'manager@company.com',
-      password: 'hashed_password_here',
-      type: 'BUSINESS',
+      passwordHash: '$2b$10$pHOuuh2zN3k9r/WVIb8eO.KBzwqGU6osI3UmnlklQx1UyhHFK4CVC',
+      type: AdminType.BUSINESS,
       roleId: managerRole.id
     }
   })
 
-  const staff = await prisma.admin.upsert({
+  await prisma.admin.upsert({
     where: { email: 'staff@company.com' },
     update: {},
     create: {
+      tenantId: tenant.id,
       name: 'Staff User',
       email: 'staff@company.com',
-      password: 'hashed_password_here',
-      type: 'BUSINESS',
+      passwordHash: '$2b$10$pHOuuh2zN3k9r/WVIb8eO.KBzwqGU6osI3UmnlklQx1UyhHFK4CVC',
+      type: AdminType.BUSINESS,
       roleId: staffRole.id
     }
   })
 
-  console.log('✅ Database seeded!')
-  console.log('\n📋 Admin IDs para testes:')
-  console.log(`SuperAdmin: ${superAdmin.id}`)
-  console.log(`Manager: ${manager.id}`)
-  console.log(`Staff: ${staff.id}`)
+  console.log('✅ Database seeded successfully!')
 }
 
 main()
-  .catch((e) => {
-    console.error('❌ Seed error:', e)
-    process.exit(1)
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+  .catch(console.error)
+  .finally(() => prisma.$disconnect())

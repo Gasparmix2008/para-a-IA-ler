@@ -1,13 +1,15 @@
 // src/server/secure/SecureRequest.ts
 import crypto from "crypto";
+import { cookies } from "next/headers";
 
 /**
- * Classe para fazer requisições autenticadas ao servidor central usando HMAC
+ * Classe para fazer requisições autenticadas ao servidor central usando HMAC + Bearer Token do usuário
  * 
  * Segurança implementada:
- * - HMAC SHA-256 para assinatura
+ * - HMAC SHA-256 para assinatura do servidor (usando BUSINESS_SECRET)
  * - Timestamp para prevenir replay attacks
- * - Credenciais sempre via headers (mais seguro)
+ * - Bearer Token do usuário obtido automaticamente do cookie "token"
+ * - Credenciais via headers (mais seguro)
  * - Validação de variáveis de ambiente
  * - Timeout configurável para requisições
  */
@@ -16,18 +18,31 @@ export default class SecureRequest {
     private static secret = process.env.BUSINESS_SECRET;
     private static host = process.env.HOST_CENTRAL;
     private static defaultTimeout = 30000; // 30 segundos por padrão
-
     /**
      * Valida se as variáveis de ambiente necessárias estão configuradas
      */
     private static validateEnvironment(): boolean {
         if (!this.secret || !this.port || !this.host) {
             console.error(
-                "❌ Variáveis de ambiente não configuradas: BUSINESS_SECRET, SUBSERVER_PORT ou CENTRAL_SERVER_URL"
+                "❌ Variáveis de ambiente não configuradas: BUSINESS_SECRET, SUBSERVER_PORT ou HOST_CENTRAL"
             );
             return false;
         }
         return true;
+    }
+
+    /**
+     * Obtém o token do usuário dos cookies do Next.js
+     */
+    private static async getUserToken(): Promise<string | undefined> {
+        try {
+            const cookieStore = await cookies();
+            const tokenCookie = cookieStore.get("token");
+            return tokenCookie?.value;
+        } catch (error) {
+            console.warn("⚠️ Não foi possível obter token do usuário dos cookies:", error);
+            return undefined;
+        }
     }
 
     /**
@@ -48,42 +63,29 @@ export default class SecureRequest {
     }
 
     /**
-     * Cria headers de autenticação HMAC
+     * Cria headers de autenticação HMAC + Bearer Token do usuário
      */
-    private static buildAuthHeaders() {
+    private static async buildAuthHeaders(userToken?: string) {
         const auth = this.buildSignature();
         if (!auth) {
             return null;
         }
-        return {
+        
+        const headers: Record<string, string> = {
             "x-port": auth.port,
             "x-timestamp": auth.timestamp,
             "x-signature": auth.signature,
         };
-    }
 
-    /**
-     * Adiciona timeout à requisição usando AbortController
-     */
-    private static withTimeout(
-        promise: Promise<Response>,
-        timeout: number
-    ): Promise<Response> {
-        return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => {
-                reject(new Error(`⏱️ Timeout: Requisição excedeu ${timeout}ms`));
-            }, timeout);
+        // Obtém token do usuário (do parâmetro ou dos cookies)
+        const token = userToken || await this.getUserToken();
+        
+        // Adiciona Bearer Token do usuário se disponível
+        if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+        }
 
-            promise
-                .then((response) => {
-                    clearTimeout(timer);
-                    resolve(response);
-                })
-                .catch((error) => {
-                    clearTimeout(timer);
-                    reject(error);
-                });
-        });
+        return headers;
     }
 
     /**
@@ -120,22 +122,23 @@ export default class SecureRequest {
     }
 
     /**
-     * Requisição POST com autenticação HMAC
-     * Credenciais enviadas via headers (mais seguro)
+     * Requisição POST com autenticação HMAC + Bearer Token do usuário
      */
     static async post<T extends Record<string, unknown>>(
         endpoint: string,
         body: T,
-        config: RequestInit & { timeout?: number } = {}
+        config: RequestInit & { timeout?: number; userToken?: string } = {}
     ): Promise<Response> {
+        const { userToken, timeout = this.defaultTimeout, ...fetchConfig } = config;
+        
         // Verifica variáveis de ambiente
-        const authHeaders = this.buildAuthHeaders();
+        const authHeaders = await this.buildAuthHeaders(userToken);
         if (!authHeaders) {
             return new Response(
                 JSON.stringify({
                     success: false,
                     error: "Variáveis de ambiente não configuradas",
-                    details: "BUSINESS_SECRET, SUBSERVER_PORT ou CENTRAL_SERVER_URL não definidos"
+                    details: "BUSINESS_SECRET, SUBSERVER_PORT ou HOST_CENTRAL não definidos"
                 }),
                 {
                     status: 500,
@@ -145,7 +148,6 @@ export default class SecureRequest {
             );
         }
 
-        const { timeout = this.defaultTimeout, ...fetchConfig } = config;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -171,20 +173,21 @@ export default class SecureRequest {
     }
 
     /**
-     * Requisição GET com autenticação HMAC
-     * Credenciais enviadas via headers (mais seguro)
+     * Requisição GET com autenticação HMAC + Bearer Token do usuário
      */
     static async get(
         endpoint: string,
-        config: RequestInit & { timeout?: number } = {}
+        config: RequestInit & { timeout?: number; userToken?: string } = {}
     ): Promise<Response> {
-        const authHeaders = this.buildAuthHeaders();
+        const { userToken, timeout = this.defaultTimeout, ...fetchConfig } = config;
+        
+        const authHeaders = await this.buildAuthHeaders(userToken);
         if (!authHeaders) {
             return new Response(
                 JSON.stringify({
                     success: false,
                     error: "Variáveis de ambiente não configuradas",
-                    details: "BUSINESS_SECRET, SUBSERVER_PORT ou CENTRAL_SERVER_URL não definidos"
+                    details: "BUSINESS_SECRET, SUBSERVER_PORT ou HOST_CENTRAL não definidos"
                 }),
                 {
                     status: 500,
@@ -194,7 +197,6 @@ export default class SecureRequest {
             );
         }
 
-        const { timeout = this.defaultTimeout, ...fetchConfig } = config;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -218,21 +220,22 @@ export default class SecureRequest {
     }
 
     /**
-     * Requisição PUT com autenticação HMAC
-     * Credenciais enviadas via headers (mais seguro)
+     * Requisição PUT com autenticação HMAC + Bearer Token do usuário
      */
     static async put<T extends Record<string, unknown>>(
         endpoint: string,
         body: T,
-        config: RequestInit & { timeout?: number } = {}
+        config: RequestInit & { timeout?: number; userToken?: string } = {}
     ): Promise<Response> {
-        const authHeaders = this.buildAuthHeaders();
+        const { userToken, timeout = this.defaultTimeout, ...fetchConfig } = config;
+        
+        const authHeaders = await this.buildAuthHeaders(userToken);
         if (!authHeaders) {
             return new Response(
                 JSON.stringify({
                     success: false,
                     error: "Variáveis de ambiente não configuradas",
-                    details: "BUSINESS_SECRET, SUBSERVER_PORT ou CENTRAL_SERVER_URL não definidos"
+                    details: "BUSINESS_SECRET, SUBSERVER_PORT ou HOST_CENTRAL não definidos"
                 }),
                 {
                     status: 500,
@@ -242,7 +245,6 @@ export default class SecureRequest {
             );
         }
 
-        const { timeout = this.defaultTimeout, ...fetchConfig } = config;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -268,16 +270,30 @@ export default class SecureRequest {
     }
 
     /**
-     * Requisição PATCH com autenticação HMAC
-     * Credenciais enviadas via headers (mais seguro)
+     * Requisição PATCH com autenticação HMAC + Bearer Token do usuário
      */
     static async patch<T extends Record<string, unknown>>(
         endpoint: string,
         body: T,
-        config: RequestInit & { timeout?: number } = {}
+        config: RequestInit & { timeout?: number; userToken?: string } = {}
     ): Promise<Response> {
-        const { timeout = this.defaultTimeout, ...fetchConfig } = config;
-        const authHeaders = this.buildAuthHeaders();
+        const { userToken, timeout = this.defaultTimeout, ...fetchConfig } = config;
+        
+        const authHeaders = await this.buildAuthHeaders(userToken);
+        if (!authHeaders) {
+            return new Response(
+                JSON.stringify({
+                    success: false,
+                    error: "Variáveis de ambiente não configuradas",
+                    details: "BUSINESS_SECRET, SUBSERVER_PORT ou HOST_CENTRAL não definidos"
+                }),
+                {
+                    status: 500,
+                    statusText: "Configuration Error",
+                    headers: { "Content-Type": "application/json" }
+                }
+            );
+        }
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -304,15 +320,29 @@ export default class SecureRequest {
     }
 
     /**
-     * Requisição DELETE com autenticação HMAC
-     * Credenciais enviadas via headers (mais seguro)
+     * Requisição DELETE com autenticação HMAC + Bearer Token do usuário
      */
     static async delete(
         endpoint: string,
-        config: RequestInit & { timeout?: number } = {}
+        config: RequestInit & { timeout?: number; userToken?: string } = {}
     ): Promise<Response> {
-        const { timeout = this.defaultTimeout, ...fetchConfig } = config;
-        const authHeaders = this.buildAuthHeaders();
+        const { userToken, timeout = this.defaultTimeout, ...fetchConfig } = config;
+        
+        const authHeaders = await this.buildAuthHeaders(userToken);
+        if (!authHeaders) {
+            return new Response(
+                JSON.stringify({
+                    success: false,
+                    error: "Variáveis de ambiente não configuradas",
+                    details: "BUSINESS_SECRET, SUBSERVER_PORT ou HOST_CENTRAL não definidos"
+                }),
+                {
+                    status: 500,
+                    statusText: "Configuration Error",
+                    headers: { "Content-Type": "application/json" }
+                }
+            );
+        }
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -337,15 +367,30 @@ export default class SecureRequest {
     }
 
     /**
-     * Requisição genérica com autenticação HMAC
+     * Requisição genérica com autenticação HMAC + Bearer Token do usuário
      * Para casos especiais onde você precisa de mais controle
      */
     static async request(
         endpoint: string,
-        config: RequestInit & { timeout?: number } = {}
+        config: RequestInit & { timeout?: number; userToken?: string } = {}
     ): Promise<Response> {
-        const { timeout = this.defaultTimeout, ...fetchConfig } = config;
-        const authHeaders = this.buildAuthHeaders();
+        const { userToken, timeout = this.defaultTimeout, ...fetchConfig } = config;
+        
+        const authHeaders = await this.buildAuthHeaders(userToken);
+        if (!authHeaders) {
+            return new Response(
+                JSON.stringify({
+                    success: false,
+                    error: "Variáveis de ambiente não configuradas",
+                    details: "BUSINESS_SECRET, SUBSERVER_PORT ou HOST_CENTRAL não definidos"
+                }),
+                {
+                    status: 500,
+                    statusText: "Configuration Error",
+                    headers: { "Content-Type": "application/json" }
+                }
+            );
+        }
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);

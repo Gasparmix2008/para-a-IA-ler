@@ -2,6 +2,7 @@
 export interface LoginCredentials {
     status: number;
     data: {
+        error?: string,
         admin: {
             email: string,
             name: string,

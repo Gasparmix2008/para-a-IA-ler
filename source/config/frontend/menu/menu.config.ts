@@ -1,13 +1,13 @@
+import { PermissionAction, Resource } from "@prisma/client"
 // menu.config.ts
-import { Home, Package2, LinkIcon, Percent, PieChart, Activity, Sparkles, Users, ShoppingBag, Infinity, Store, TrendingUp, DollarSign, Settings } from "lucide-react"
-
 export interface MenuItem {
     id: string
     title: string
-    icon: any
+    icon: string
     link: string
-    resource: string // Recurso da permissão
-    action: string // Ação requerida (view, create, update, delete)
+    resource: Resource
+    isActive: boolean
+    action: PermissionAction
     subs?: SubMenuItem[]
 }
 
@@ -15,224 +15,174 @@ export interface SubMenuItem {
     id?: string
     title?: string
     link: string
-    icon?: any
+    icon?: string
     resource: string
     action: string
 }
+
+
+/* 
+    manager@company.com
+    super@company.com
+    staff@company.com
+
+    SENHA: 123
+*/
 
 // Menu completo com todas as rotas possíveis
 export const FULL_MENU: MenuItem[] = [
     {
         id: "home",
         title: "Home",
-        icon: Home,
-        link: "/dashboard",
-        resource: "dashboard",
-        action: "view"
+        icon: "home",
+        isActive: true,
+        link: "/",
+        resource: Resource.ORDER, //🎉🎉🎉🎉👯‍♀️👯‍♂️🍰FOI CARALHO, TMNC - RBAC E ABAC DE MEEEEERDAAAA, QUEM CRIOU TEM QUE SI FUDER MUITO
+        action: PermissionAction.VIEW, // SE VC ESTÁ LENDO (FUTUROS PROGRAMADORES CLT'S KLKKKK), TEM MUUUUUUITA IA NESSA BOSTA, DEVE TÁ CHEIO DE COISA INUTIL KKKKKKKKKKKKKKKKKKKKK
+        subs: [
+            {
+                id: "order-list",
+                title: "List Orders",
+                link: "/order",
+                icon: "package",
+                resource: "order",
+                action: PermissionAction.VIEW
+            },
+            {
+                id: "order-links",
+                title: "Order Links",
+                link: "/order/links",
+                icon: "link",
+                resource: "order",
+                action: PermissionAction.VIEW
+            }
+        ]
     },
     {
         id: "products",
         title: "Products",
-        icon: Package2,
+        icon: "package",
         link: "/products",
-        resource: "products",
-        action: "view",
+        isActive: false,
+        resource: Resource.PRODUCT,
+        action: PermissionAction.VIEW,
         subs: [
             {
                 id: "products-list",
                 title: "List Products",
                 link: "/products",
-                icon: Package2,
-                resource: "products",
-                action: "view"
+                icon: "package",
+                resource: "product",
+                action: PermissionAction.VIEW
             },
             {
                 id: "products-links",
                 title: "Product Links",
                 link: "/products/links",
-                icon: LinkIcon,
-                resource: "products",
-                action: "view"
+                icon: "link",
+                resource: "product",
+                action: PermissionAction.VIEW
             },
             {
                 id: "products-discounts",
                 title: "Discounts",
                 link: "/products/discounts",
-                icon: Percent,
-                resource: "products",
+                icon: "percent",
+                resource: Resource.PRODUCT,
                 action: "manage"
             }
         ]
     },
     {
-        id: "usage-billing",
-        title: "Usage Billing",
-        icon: PieChart,
-        link: "/billing",
-        resource: "billing",
-        action: "view",
-        subs: [
-            {
-                id: "billing-meters",
-                title: "Meters",
-                link: "/billing/meters",
-                icon: PieChart,
-                resource: "billing",
-                action: "view"
-            },
-            {
-                id: "billing-events",
-                title: "Events",
-                link: "/billing/events",
-                icon: Activity,
-                resource: "billing",
-                action: "view"
-            }
-        ]
-    },
-    {
-        id: "benefits",
-        title: "Benefits",
-        icon: Sparkles,
-        link: "/benefits",
-        resource: "benefits",
-        action: "view"
-    },
-    {
         id: "customers",
         title: "Customers",
-        icon: Users,
+        icon: "users",
         link: "/customers",
-        resource: "customers",
-        action: "view"
-    },
-    {
-        id: "sales",
-        title: "Sales",
-        icon: ShoppingBag,
-        link: "/sales",
-        resource: "sales",
-        action: "view",
+        isActive: false,
+        resource: Resource.CUSTOMER,
+        action: PermissionAction.VIEW,
         subs: [
             {
-                id: "sales-orders",
-                title: "Orders",
-                link: "/sales/orders",
-                icon: ShoppingBag,
-                resource: "sales",
-                action: "view"
+                id: "whatsapp",
+                title: "Whatsapp",
+                link: "/message/whatsapp",
+                icon: "arrow-down",
+                resource: "customer",
+                action: PermissionAction.VIEW
             },
-            {
-                id: "sales-subscriptions",
-                title: "Subscriptions",
-                link: "/sales/subscriptions",
-                icon: Infinity,
-                resource: "sales",
-                action: "view"
-            }
         ]
     },
     {
-        id: "storefront",
-        title: "Storefront",
-        icon: Store,
-        link: "/storefront",
-        resource: "storefront",
-        action: "view"
-    },
-    {
-        id: "analytics",
-        title: "Analytics",
-        icon: TrendingUp,
-        link: "/analytics",
-        resource: "analytics",
-        action: "view"
-    },
-    {
-        id: "finance",
-        title: "Finance",
-        icon: DollarSign,
+        id: Resource.FINANCE,
+        title: Resource.FINANCE,
+        icon: "dollar-sign",
         link: "/finance",
-        resource: "finance",
-        action: "view",
+        isActive: false,
+        resource: Resource.FINANCE,
+        action: PermissionAction.VIEW,
         subs: [
             {
                 id: "finance-incoming",
                 title: "Incoming",
                 link: "/finance/incoming",
-                resource: "finance",
-                action: "view"
+                icon: "arrow-down",
+                resource: Resource.FINANCE,
+                action: PermissionAction.VIEW
             },
             {
                 id: "finance-outgoing",
                 title: "Outgoing",
                 link: "/finance/outgoing",
-                resource: "finance",
-                action: "view"
+                icon: "arrow-up",
+                resource: Resource.FINANCE,
+                action: PermissionAction.VIEW
             },
             {
                 id: "finance-payout",
                 title: "Payout Account",
                 link: "/finance/payout",
-                resource: "finance",
-                action: "manage"
+                icon: "credit-card",
+                resource: Resource.FINANCE,
+                action: PermissionAction.VIEW
+            },
+
+            {
+                id: "order-discounts",
+                title: "Discounts",
+                link: "/order/discounts",
+                icon: "percent",
+                resource: Resource.FINANCE,
+                action: PermissionAction.VIEW
             }
         ]
     },
-    {
-        id: "settings",
-        title: "Settings",
-        icon: Settings,
-        link: "/settings",
-        resource: "settings",
-        action: "view",
-        subs: [
-            {
-                id: "settings-general",
-                title: "General",
-                link: "/settings/general",
-                resource: "settings",
-                action: "view"
-            },
-            {
-                id: "settings-webhooks",
-                title: "Webhooks",
-                link: "/settings/webhooks",
-                resource: "settings",
-                action: "manage"
-            },
-            {
-                id: "settings-custom-fields",
-                title: "Custom Fields",
-                link: "/settings/custom-fields",
-                resource: "settings",
-                action: "manage"
-            }
-        ]
-    }
 ]
+
 
 // Menu adicional para admins de servidor
 export const ADMIN_MENU: MenuItem[] = [
     {
         id: "admin-users",
         title: "Admin Users",
-        icon: Users,
-        link: "/admin/users",
-        resource: "admin_users",
-        action: "view",
+        icon: "users",
+        link: "/server/admins",
+        isActive: true,
+        resource: Resource.ADMINS,
+        action: PermissionAction.VIEW,
         subs: [
             {
-                id: "admin-users-list",
-                title: "List Users",
-                link: "/admin/users",
-                resource: "admin_users",
-                action: "view"
+                id: "admin-customers-list",
+                title: "List Customers",
+                link: "/server/customers",
+                icon: "users",
+                resource: "admins",
+                action: PermissionAction.VIEW
             },
             {
                 id: "admin-users-roles",
                 title: "Roles & Permissions",
                 link: "/admin/roles",
+                icon: "shield",
                 resource: "admin_users",
                 action: "manage"
             }
@@ -241,17 +191,19 @@ export const ADMIN_MENU: MenuItem[] = [
     {
         id: "admin-system",
         title: "System Settings",
-        icon: Settings,
+        icon: "settings",
+        isActive: false,
         link: "/admin/system",
-        resource: "system_settings",
-        action: "view"
+        resource: Resource.OWNER,
+        action: PermissionAction.VIEW
     },
     {
         id: "admin-logs",
         title: "System Logs",
-        icon: Activity,
+        isActive: false,
+        icon: "activity",
         link: "/admin/logs",
-        resource: "system_logs",
-        action: "view"
+        resource: Resource.OWNER,
+        action: PermissionAction.VIEW
     }
 ]

@@ -1,21 +1,20 @@
-// ===============================================
-// menu.service.ts
-// ===============================================
 import { MenuItem, ADMIN_MENU, FULL_MENU } from "./menu.config"
-import { isMenuResourceAllowed, mapActionToMenuAction } from "../../../core/auth/abac-rbac/resource-mapping"
+import { PermissionAction, Resource } from "@prisma/client"
 
-interface Permission {
-    resource: string
-    action: string
-    allowed: boolean
+export interface Permission {
+    resource: Resource
+    action: PermissionAction
 }
 
-// Tipo do menu retornado (sem resource e action)
+// ==============================
+// Tipos limpos (frontend)
+// ==============================
 export interface CleanMenuItem {
     id: string
     title: string
-    icon: any
+    icon: string
     link: string
+    isActive?: boolean
     subs?: CleanSubMenuItem[]
 }
 
@@ -23,136 +22,89 @@ export interface CleanSubMenuItem {
     id?: string
     title?: string
     link: string
-    icon?: any
+    icon?: string
 }
 
+// ==============================
+// Menu Service
+// ==============================
 export class MenuService {
-    /**
-     * Filtra o menu baseado nas permissões do usuário
-     */
-    static filterMenuByPermissions(
+
+    static buildMenu(
+        permissions: Permission[],
+        isServerAdmin: boolean
+    ): CleanMenuItem[] {
+
+        const baseMenu = isServerAdmin
+            ? [...FULL_MENU, ...ADMIN_MENU]
+            : [...FULL_MENU]
+
+        const filtered = this.filterByPermissions(
+            baseMenu,
+            permissions,
+            isServerAdmin
+        )
+
+        return this.cleanMenu(filtered)
+    }
+
+    // ==============================
+    // Private helpers
+    // ==============================
+    private static filterByPermissions(
         menu: MenuItem[],
         permissions: Permission[],
         isServerAdmin: boolean
     ): MenuItem[] {
         return menu
             .map(item => {
-                // Verifica se o usuário tem permissão para o item principal
-                const hasPermission = this.checkPermission(
-                    permissions,
-                    item.resource,
-                    item.action,
-                    isServerAdmin
-                )
-
-                if (!hasPermission) return null
-
-                // Se tem submenus, filtra eles também
-                if (item.subs && item.subs.length > 0) {
-                    const filteredSubs = item.subs.filter(sub =>
-                        this.checkPermission(permissions, sub.resource, sub.action, isServerAdmin)
-                    )
-
-                    // Se não tem submenus permitidos, não mostra o item pai
-                    if (filteredSubs.length === 0) return null
-
-                    return { ...item, subs: filteredSubs }
+                if (!this.hasPermission(permissions, item.resource, item.action, isServerAdmin)) {
+                    return null
                 }
 
-                return item
+                if (!item.subs?.length) return item
+
+                const subs = item.subs.filter(sub =>
+                    this.hasPermission(permissions, sub.resource as Resource, sub.action as PermissionAction, isServerAdmin)
+                )
+
+                return subs.length ? { ...item, subs } : null
             })
-            .filter((item): item is MenuItem => item !== null)
+            .filter(Boolean) as MenuItem[]
     }
 
-    /**
-     * Remove os campos 'resource' e 'action' do menu
-     * Retorna apenas: id, title, icon, link, subs
-     */
-    static cleanMenu(menu: MenuItem[]): CleanMenuItem[] {
-        return menu.map(item => {
-            const cleanItem: CleanMenuItem = {
-                id: item.id,
-                title: item.title,
-                icon: item.icon,
-                link: item.link
-            }
+    private static hasPermission(
+        permissions: Permission[],
+        resource: Resource,
+        action: PermissionAction,
+        isServerAdmin: boolean
+    ): boolean {
+        if (isServerAdmin) return true
 
-            // Se tem submenus, limpa eles também
-            if (item.subs && item.subs.length > 0) {
-                cleanItem.subs = item.subs.map(sub => ({
+        return permissions.some(p =>
+            p.resource === resource &&
+            (
+                p.action === PermissionAction.MANAGE ||
+                p.action === action
+            )
+        )
+    }
+
+    private static cleanMenu(menu: MenuItem[]): CleanMenuItem[] {
+        return menu.map(item => ({
+            id: item.id,
+            title: item.title,
+            icon: item.icon,
+            link: item.link,
+            ...(item.isActive !== undefined && { isActive: item.isActive }),
+            ...(item.subs && {
+                subs: item.subs.map(sub => ({
                     ...(sub.id && { id: sub.id }),
                     ...(sub.title && { title: sub.title }),
                     link: sub.link,
                     ...(sub.icon && { icon: sub.icon })
                 }))
-            }
-
-            return cleanItem
-        })
-    }
-
-    /**
-     * Verifica se o usuário tem uma permissão específica
-     * Usa o mapeamento de recursos RBAC -> Menu
-     */
-    private static checkPermission(
-        permissions: Permission[],
-        menuResource: string,
-        menuAction: string,
-        isServerAdmin: boolean
-    ): boolean {
-        // Itera sobre todas as permissões do usuário
-        for (const permission of permissions) {
-            // Ignora permissões negadas
-            if (!permission.allowed) continue
-
-            // Verifica se o recurso RBAC mapeia para o recurso do menu
-            const resourceMatches = isMenuResourceAllowed(
-                permission.resource,
-                menuResource,
-                isServerAdmin
-            )
-
-            if (!resourceMatches) continue
-
-            // Verifica se a ação é permitida
-            const actionMatches = mapActionToMenuAction(
-                permission.action,
-                menuAction
-            )
-
-            if (actionMatches) {
-                return true
-            }
-        }
-
-        return false
-    }
-
-    /**
-     * Constrói o menu completo baseado no tipo de usuário
-     * Retorna menu LIMPO (sem resource e action)
-     */
-    static buildMenu(
-        permissions: Permission[],
-        isServerAdmin: boolean
-    ): CleanMenuItem[] {
-        // Menu base
-        let availableMenu = [...FULL_MENU]
-
-        // Adiciona menu de admin se for admin de servidor
-        if (isServerAdmin) {
-            availableMenu = [...availableMenu, ...ADMIN_MENU]
-        }
-
-        // Filtra baseado nas permissões
-        const filteredMenu = this.filterMenuByPermissions(
-            availableMenu,
-            permissions,
-            isServerAdmin
-        )
-
-        // Remove campos resource e action antes de retornar
-        return this.cleanMenu(filteredMenu)
+            })
+        }))
     }
 }

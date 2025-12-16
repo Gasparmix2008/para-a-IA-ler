@@ -1,5 +1,5 @@
 // =====================================================
-// 🔧 PRISMA CONFIGURATION
+// 🔧 PRISMA CONFIGURATION (ENTERPRISE 10/10)
 // =====================================================
 
 datasource db {
@@ -12,106 +12,481 @@ generator client {
 }
 
 // =====================================================
-// 📊 ENUMS
+// 🏢 TENANT
+// =====================================================
+
+model Tenant {
+  id     String  @id @default(uuid())
+  name   String  @unique @db.VarChar(255)
+  active Boolean @default(true)
+
+  // Soft delete
+  deletedAt DateTime?
+  deletedBy String?
+
+  // Metadata e configurações
+  metadata Json? @default("{}")
+  stats    Json? @default("{}")
+
+  // Relações
+  admins             Admin[]
+  roles              Role[]
+  customers          Customer[]
+  sessions           Session[]
+  settings           TenantSettings?
+  auditLogs          AuditLog[]
+  loginAttempts      LoginAttempt[]
+  verificationTokens VerificationToken[]
+
+  // Auditoria
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
+
+  @@index([active, deletedAt])
+  @@index([name, active])
+}
+
+// =====================================================
+// TENANT SETTINGS
+// =====================================================
+
+model TenantSettings {
+  id       String @id @default(uuid())
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Configurações de segurança
+  sessionDuration        Int     @default(86400) // segundos
+  maxLoginAttempts       Int     @default(5)
+  lockoutDuration        Int     @default(1800) // segundos
+  require2FA             Boolean @default(false)
+  passwordMinLength      Int     @default(8)
+  passwordRequireSpecial Boolean @default(true)
+
+  // Configurações regionais
+  timezone String @default("America/Sao_Paulo") @db.VarChar(50)
+  currency String @default("BRL") @db.VarChar(3)
+  language String @default("pt-BR") @db.VarChar(10)
+
+  // Features habilitadas por tenant
+  features Json @default("{}")
+
+  // Limites
+  maxAdmins    Int? @default(100)
+  maxCustomers Int?
+
+  // Auditoria
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
+}
+
+// =====================================================
+// ENUMS
 // =====================================================
 
 enum AdminType {
-  SERVER    // Server Administrator
-  BUSINESS  // Business / Company Administrator
+  SERVER
+  BUSINESS
+}
+
+enum Resource {
+  PRODUCT
+  ORDER
+  FINANCE
+  CUSTOMER
+  SUPPORT
+  ADMINS
+  OWNER
+}
+
+enum PermissionAction {
+  VIEW
+  CREATE
+  UPDATE
+  DELETE
+  MANAGE
+}
+
+enum LoginType {
+  PHONE_ONLY
+  EMAIL_PASSWORD
+  EMAIL_PASSWORD_2FA
+}
+
+enum SessionOwnerType {
+  ADMIN
+  CUSTOMER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  PASSWORD_CHANGE
+  PERMISSION_CHANGE
+}
+
+enum TokenType {
+  PASSWORD_RESET
+  EMAIL_VERIFY
+  PHONE_VERIFY
+  TWO_FACTOR
 }
 
 // =====================================================
-// 📊 PERMISSION MODELS
+// ROLES & PERMISSIONS
 // =====================================================
 
 model Role {
-  id          String           @id @default(uuid())
-  name        String           @unique // SuperAdmin, Manager, Staff, Moderator, etc.
-  description String?
+  id       String @id @default(uuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String  @db.VarChar(255)
+  description String? @db.Text
+
+  // Soft delete
+  deletedAt DateTime?
+  deletedBy String?
+
   permissions RolePermission[]
-  
-  // Relation with admins
-  admins Admin[]
-  
+  admins      Admin[]
+
+  // Auditoria
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
+
+  @@unique([tenantId, name])
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, name, deletedAt])
 }
 
 model RolePermission {
-  id         String  @id @default(uuid())
-  resource   String  // "finance", "order", "users", "customers", "products", etc.
-  action     String  // "manage", "view", "create", "update", "delete", "approve"
-  allowed    Boolean @default(true)
-  attributes Json?   // ABAC (Attribute-Based Access Control) - extra conditions
+  id String @id @default(uuid())
 
-  roleId     String
-  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  resource Resource
+  action   PermissionAction
+
+  attributes Json? @default("{}")
+
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  // Auditoria
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
 
   @@unique([roleId, resource, action])
   @@index([roleId])
   @@index([resource, action])
+  @@index([roleId, resource])
 }
 
 // =====================================================
-// 👥 USER MODELS
+// ADMIN
+// =====================================================
+
+model Admin {
+  id       String @id @default(uuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name         String    @db.VarChar(255)
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @db.VarChar(255)
+  type         AdminType
+
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  // Controle de acesso
+  isActive      Boolean   @default(true)
+  lastLogin     DateTime?
+  loginAttempts Int       @default(0)
+  lockedUntil   DateTime?
+
+  // 2FA
+  twoFactorSecret  String? @db.VarChar(255)
+  twoFactorEnabled Boolean @default(false)
+
+  // Recovery
+  recoveryCodes Json? // array de códigos hash
+
+  // Password tracking
+  passwordChangedAt DateTime?
+  passwordExpiresAt DateTime?
+
+  // Soft delete
+  deletedAt DateTime?
+  deletedBy String?
+
+  sessions           Session[]
+  verificationTokens VerificationToken[]
+
+  // Auditoria
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, roleId, deletedAt])
+  @@index([type, isActive, deletedAt])
+  @@index([email, isActive])
+  @@index([tenantId, isActive, type])
+}
+
+// =====================================================
+// CUSTOMER
 // =====================================================
 
 model Customer {
-  id    String @id @default(uuid())
-  name  String
-  phone String @unique
-  
-  // Customers do not have roles - default system access
-  
+  id       String @id @default(uuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name    String  @db.VarChar(255)
+  phone   String  @unique @db.VarChar(20)
+  address String? @db.Text
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Soft delete
+  deletedAt DateTime?
+  deletedBy String?
+
+  // Metadata
+  metadata Json? @default("{}")
+
+  logins             CustomerLogin[]
+  sessions           Session[]
+  verificationTokens VerificationToken[]
+
+  // Auditoria
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  @@index([name])
+  createdBy String?
+  updatedBy String?
+
+  @@index([tenantId, phone, deletedAt])
+  @@index([tenantId, isActive, deletedAt])
+  @@index([phone, isActive])
 }
 
-model Admin {
-  id       String    @id @default(uuid())
-  name     String
-  email    String    @unique
-  password String
-  type     AdminType // SERVER or BUSINESS
-  
-  // Permissions
-  roleId String
-  role   Role   @relation(fields: [roleId], references: [id])
+model CustomerLogin {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  // SESSIONS []
-  sessions Session[]
-  
-  // Additional information
-  isActive Boolean @default(true) // If false, the admin is banned or inactive
-  
+  type         LoginType
+  email        String?   @db.VarChar(255)
+  passwordHash String?   @db.VarChar(255)
+
+  // Verificação
+  isVerified Boolean   @default(false)
+  verifiedAt DateTime?
+
+  // Controle de acesso
+  lastLogin     DateTime?
+  loginAttempts Int       @default(0)
+  lockedUntil   DateTime?
+
+  // 2FA
+  twoFactorSecret  String? @db.VarChar(255)
+  twoFactorEnabled Boolean @default(false)
+
+  // Recovery codes
+  recoveryCodes Json? // array de códigos hash
+
+  // Password tracking
+  passwordChangedAt DateTime?
+  passwordExpiresAt DateTime?
+
+  // Soft delete
+  deletedAt DateTime?
+  deletedBy String?
+
+  // Auditoria
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  lastLogin DateTime?
-  
-  @@index([roleId])
-  @@index([type])
-  @@index([email])
-  @@index([type, isActive]) // For queries filtering by type and status
+  createdBy String?
+  updatedBy String?
+
+  @@unique([customerId, type, deletedAt])
+  @@index([customerId, deletedAt])
+  @@index([email, deletedAt])
+  @@index([type, isVerified, deletedAt])
+  @@index([email, isVerified])
 }
+
+// =====================================================
+// SESSION
+// =====================================================
 
 model Session {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  adminId   String
-  admin     Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  id    String @id @default(uuid())
+  token String @unique @db.VarChar(255)
 
-  ip        String?
-  userAgent String?
+  ownerType SessionOwnerType
 
-  active    Boolean  @default(true)
-  expiresAt DateTime
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  adminId    String?
+  admin      Admin?    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // Informações de contexto
+  ip    String? @db.VarChar(45)
+  agent String? @db.Text
+  city  String? @db.VarChar(255)
+
+  // Device fingerprint
+  deviceId   String? @db.VarChar(255)
+  deviceName String? @db.VarChar(255)
+
+  // Status
+  active     Boolean   @default(true)
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  lastUsedAt DateTime  @default(now())
+
+  // Auditoria
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([adminId])
-  @@index([token])
+  @@index([token, active])
+  @@index([adminId, active, expiresAt])
+  @@index([customerId, active, expiresAt])
   @@index([active, expiresAt])
+  @@index([ownerType, active])
+  @@index([tenantId, active, expiresAt])
+  @@index([tenantId, ownerType, active])
+  @@index([deviceId, active])
+}
+
+// =====================================================
+// AUDIT LOG
+// =====================================================
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Entidade afetada
+  entityType String @db.VarChar(100) // "Admin", "Customer", "Role", etc
+  entityId   String @db.VarChar(255)
+
+  // Ação realizada
+  action      AuditAction
+  description String?     @db.Text
+
+  // Quem executou
+  performedBy     String           @db.VarChar(255) // adminId ou customerId
+  performedByType SessionOwnerType
+
+  // Dados da mudança
+  changes Json? // {before: {...}, after: {...}}
+
+  // Contexto da requisição
+  ip        String? @db.VarChar(45)
+  userAgent String? @db.Text
+  sessionId String? @db.VarChar(255)
+
+  // Metadata adicional
+  metadata Json? @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, entityType, entityId, createdAt])
+  @@index([performedBy, createdAt])
+  @@index([createdAt])
+  @@index([tenantId, action, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([tenantId, performedBy, createdAt])
+}
+
+// =====================================================
+// LOGIN ATTEMPTS
+// =====================================================
+
+model LoginAttempt {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  identifier String           @db.VarChar(255) // email ou phone
+  type       SessionOwnerType
+
+  success Boolean
+  reason  String? @db.VarChar(255) // "INVALID_PASSWORD", "ACCOUNT_LOCKED", "2FA_FAILED", etc
+
+  // Contexto
+  ip        String  @db.VarChar(45)
+  agent String? @db.Text
+  deviceId  String? @db.VarChar(255) Obrigado bicho da pindolona!!!!
+
+  // Metadata
+  metadata Json? @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@index([identifier, createdAt])
+  @@index([tenantId, success, createdAt])
+  @@index([tenantId, identifier, success, createdAt])
+  @@index([ip, createdAt])
+  @@index([success, createdAt])
+}
+
+// =====================================================
+// VERIFICATION TOKENS
+// =====================================================
+
+model VerificationToken {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  token String    @unique @db.VarChar(255)
+  type  TokenType
+
+  // Owner do token
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  adminId String?
+  admin   Admin?  @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  // Status
+  used      Boolean   @default(false)
+  usedAt    DateTime?
+  expiresAt DateTime
+
+  // Contexto de uso
+  usedFromIp String? @db.VarChar(45)
+  metadata   Json?   @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@index([token, used, expiresAt])
+  @@index([customerId, type, used, expiresAt])
+  @@index([adminId, type, used, expiresAt])
+  @@index([type, used, expiresAt])
+  @@index([tenantId, type, used, createdAt])
 }

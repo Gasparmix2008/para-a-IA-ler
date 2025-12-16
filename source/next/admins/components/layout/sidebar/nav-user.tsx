@@ -4,10 +4,10 @@ import { useEffect, useState } from "react"
 import {
   BadgeCheck,
   Bell,
-  ChevronsUpDown,
   CreditCard,
   LogOut,
 } from "lucide-react"
+import { logout } from "@/server/actions/logout"
 
 import {
   Avatar,
@@ -29,6 +29,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 export function NavUser({
   user,
@@ -42,6 +44,15 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const [permissions, setPermissions] = useState<string[]>([])
+  const router = useRouter()
+
+  async function handleLogout() {
+    const response = await logout()
+
+    toast.success(response.status == 200 ? "Logout realizado com sucesso" : "Não foi possível fazer logout")
+
+    return router.push("/login")
+  }
 
   // Carrega permissões do localStorage
   useEffect(() => {
@@ -138,7 +149,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleLogout()}>
               <LogOut />
               Sair
             </DropdownMenuItem>

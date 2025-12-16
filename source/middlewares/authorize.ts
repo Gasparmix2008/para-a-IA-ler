@@ -1,4 +1,4 @@
-import { FastifyReply, FastifyRequest } from 'fastify'
+/* import { FastifyReply, FastifyRequest } from 'fastify'
 import { can } from '../core/auth/can'
 import { Action, Resource } from '../core/auth/abac-rbac'
 
@@ -12,4 +12,4 @@ export function authorize(resource: Resource, action: Action) {
             return reply.status(403).send({ error: 'Forbidden' })
         }
     }
-}
+} */

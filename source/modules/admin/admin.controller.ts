@@ -1,5 +1,4 @@
 import { PrismaClient } from "@prisma/client";
-import { Bcrypt } from "../../core/crypto/hash.service";
 const prisma = new PrismaClient();
 
 export default class AdminController {
@@ -10,7 +9,7 @@ export default class AdminController {
                 id: true,
                 email: true,
                 name: true,
-                password: true,
+                passwordHash: true,
                 role: {
                     select: {
                         name: true,
@@ -18,7 +17,7 @@ export default class AdminController {
                             select: {
                                 resource: true,
                                 action: true,
-                                allowed: true
+                                attributes: true
                             }
                         }
                     }

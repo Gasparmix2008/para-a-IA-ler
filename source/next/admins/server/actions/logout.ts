@@ -12,15 +12,8 @@ export async function logout() {
     const user = await response.json();
 
     if (user.status == 200) {
-        (await cookies()).delete({
-            name: "token",
-            httpOnly: true,
-            path: "/",
-            sameSite: "lax",
-            secure: process.env.NODE_ENV === "production",
-        });
+        (await cookies()).delete("token");
 
-        return user;
+        return user
     }
-
 }

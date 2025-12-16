@@ -1,10 +1,9 @@
-import { RolePermission as PrismaRolePermission } from '@prisma/client'
-import { Action, Resource } from './permissions'
+import { RolePermission as PrismaRolePermission, PermissionAction, Resource } from '@prisma/client'
 
 // Sobrescrever os tipos do Prisma
 export type RolePermission = Omit<PrismaRolePermission, 'resource' | 'action' | 'attributes'> & {
     resource: Resource
-    action: Action
+    action: PermissionAction
     attributes?: {
         denyFields?: string[]
         onlyOwnBusiness?: boolean

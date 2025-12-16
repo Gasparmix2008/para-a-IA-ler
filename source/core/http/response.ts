@@ -27,4 +27,11 @@ export class HttpResponse {
             data: null,
         };
     }
+
+    static badRequest(data: string) {
+        return {
+            status: 500,
+            data,
+        };
+    }
 }

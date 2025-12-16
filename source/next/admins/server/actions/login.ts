@@ -4,14 +4,21 @@ import { LoginCredentials } from "@/types/auth";
 import SecureRequest from "../secure/SecureRequest";
 import { cookies } from "next/headers";
 
+
+
 export async function login(
     email: string,
     password: string,
-    rememberMe: boolean = false
+    rememberMe: boolean = false,
+    location: {
+        city: string;
+        region: string;
+        country: string;
+    } | null
 ): Promise<LoginCredentials> {
     const response = await SecureRequest.post(
         "/admin/login",
-        { email, password, rememberMe },
+        { email, password, rememberMe, location },
         { timeout: 5000 }
     );
 

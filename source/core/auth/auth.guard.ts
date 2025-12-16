@@ -2,7 +2,7 @@ import { FastifyRequest } from 'fastify'
 import { PrismaClient } from "@prisma/client";
 import { JwtService } from './jwt.service';
 import { RolePermission } from './abac-rbac/types';
-import { Resource, Action } from './abac-rbac/permissions';
+import { PermissionAction, Resource } from '@prisma/client'
 
 const prisma = new PrismaClient();
 
@@ -10,7 +10,6 @@ export async function authGuard(
     request: FastifyRequest
 ) {
     const token = request.cookies?.token;
-    console.log(token)
     if (!token) {
         return "Unauthorized"
     }
@@ -35,7 +34,7 @@ export async function authGuard(
         }
     })
 
-    if (!session || !session.admin.isActive) {
+    if (!session || !session.admin || !session.admin.isActive) {
         return "Session expired"
     }
 
@@ -47,7 +46,7 @@ export async function authGuard(
             permissions: session.admin.role.permissions.map(p => ({
                 ...p,
                 resource: p.resource as Resource,
-                action: p.action as Action,
+                action: p.action as PermissionAction,
                 attributes: p.attributes as RolePermission['attributes']
             }))
         }
