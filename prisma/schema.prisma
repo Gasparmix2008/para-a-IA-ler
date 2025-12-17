@@ -404,7 +404,7 @@ model AuditLog {
 
   // Contexto da requisição
   ip        String? @db.VarChar(45)
-  userAgent String? @db.Text
+  agent     String? @db.Text
   sessionId String? @db.VarChar(255)
 
   // Metadata adicional
@@ -439,7 +439,7 @@ model LoginAttempt {
   // Contexto
   ip        String  @db.VarChar(45)
   agent String? @db.Text
-  deviceId  String? @db.VarChar(255) Obrigado bicho da pindolona!!!!
+  deviceId  String? @db.VarChar(255)
 
   // Metadata
   metadata Json? @default("{}")

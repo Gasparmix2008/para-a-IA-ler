@@ -16,6 +16,7 @@ export async function authGuard(
 
     const sessionId = JwtService.verify(token) as { rawToken: string }
 
+
     // Busca Session
     const session = await prisma.session.findFirst({
         where: {

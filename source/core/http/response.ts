@@ -34,4 +34,25 @@ export class HttpResponse {
             data,
         };
     }
+
+    static internalServerError(data: string) {
+        return {
+            status: 500,
+            data,
+        };
+    }
+
+    static forbidden(data: string) {
+        return {
+            status: 500,
+            data,
+        };
+    }
+
+    static notFound(data: string) {
+        return {
+            status: 404,
+            data,
+        };
+    }
 }

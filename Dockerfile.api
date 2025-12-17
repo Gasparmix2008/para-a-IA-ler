@@ -1,0 +1,55 @@
+# --------------------
+# Stage 1: Base
+# --------------------
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN npm install -g pnpm
+
+# --------------------
+# Stage 2: Dependencies
+# --------------------
+FROM base AS deps
+# Copiar todos os package.json e lockfiles
+COPY package.json pnpm-lock.yaml ./
+COPY source/next/admins/package.json source/next/admins/pnpm-lock.yaml ./source/next/admins/
+COPY source/next/landing-page/package.json source/next/landing-page/pnpm-lock.yaml ./source/next/landing-page/
+RUN pnpm install --frozen-lockfile
+
+# --------------------
+# Stage 3: Build
+# --------------------
+FROM deps AS build
+COPY . .
+
+# Variáveis de ambiente para build
+ARG DATABASE_URL
+ENV DATABASE_URL=$DATABASE_URL
+
+# Prisma generate
+RUN pnpm prisma generate
+
+# Build Next.js
+RUN pnpm build
+
+# --------------------
+# Stage 4: Production
+# --------------------
+FROM node:20-alpine AS prod
+WORKDIR /app
+RUN npm install -g pnpm
+
+# Copiar dependências e build
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/public ./public
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/next.config.js ./next.config.js
+COPY --from=build /app/tsconfig.json ./tsconfig.json
+COPY --from=build /app/source/next ./source/next
+
+# Expor porta Next.js
+EXPOSE 3000
+
+# Comando padrão
+CMD ["pnpm", "start"]

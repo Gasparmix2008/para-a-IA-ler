@@ -105,7 +105,7 @@ export default function Page() {
         localStorage.setItem("name", user.data.admin.name);
         localStorage.setItem(
             "permission",
-            JSON.stringify(user.data.admin.permission)
+            JSON.stringify(user.data.admin.permissions)
         );
         localStorage.setItem("email", user.data.admin.email);
         localStorage.setItem("role_changing_it_wont_help", user.data.admin.role);

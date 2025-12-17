@@ -8,7 +8,7 @@ export interface LoginCredentials {
             name: string,
             role: string,
             type: string,
-            permission: string[],
+            permissions: string[],
             menu: string[]
         }
         token: string

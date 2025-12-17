@@ -26,13 +26,6 @@ export async function login(
 
     if (!user?.data?.token) return user;
 
-    user.data.admin.permission = Array.isArray(user.data.admin.permission)
-        ? user.data.admin.permission.map(
-            (p: { resource: string; action: string }) =>
-                `${p.resource}:${p.action}`
-        )
-        : [];
-
     (await cookies()).set({
         name: "token",
         value: user.data.token,
